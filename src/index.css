@@ -1,0 +1,30 @@
+:root {
+  font-family: Calibri, Arial, "Segoe UI", sans-serif;
+  line-height: 1.4;
+  font-weight: 400;
+  color: #1f2937;
+  background: #f3f6f9;
+  --jf-blue: #002f6c;
+  --jf-green: #007a33;
+  --jf-gray: #97999f;
+  --jf-blue-soft: #dfe8f4;
+  --jf-green-soft: #e6f3ec;
+  --jf-gray-soft: #eef0f2;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    linear-gradient(
+      rgba(243, 246, 249, 0.8),
+      rgba(243, 246, 249, 0.8)
+    ),
+    url("./assets/background-jfal.jpeg") center / cover fixed no-repeat;
+}
