@@ -6,9 +6,15 @@ services:
     container_name: painel-glpi
     ports:
       - "7020:7020"
-    env_file:
-      - .env
     environment:
-      API_PORT: 7020
-      NODE_ENV: production
+      API_PORT: "7020"
+      NODE_ENV: "production"
+      GLPI_API_BASE: "${GLPI_API_BASE}"
+      GLPI_APP_TOKEN: "${GLPI_APP_TOKEN}"
+      GLPI_USER_TOKEN: "${GLPI_USER_TOKEN}"
+      GLPI_LOGIN: "${GLPI_LOGIN}"
+      GLPI_PASSWORD: "${GLPI_PASSWORD}"
+      GLPI_INSECURE_TLS: "${GLPI_INSECURE_TLS:-true}"
+      VITE_BACKEND_URL: "${VITE_BACKEND_URL:-}"
+      VITE_GLPI_TICKET_URL: "${VITE_GLPI_TICKET_URL}"
     restart: unless-stopped
