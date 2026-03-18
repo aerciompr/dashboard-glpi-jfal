@@ -60,6 +60,28 @@ npm run start
 
 A aplicação ficará disponível em `http://SEU_SERVIDOR:API_PORT`.
 
+## Docker (porta 7020)
+
+Build da imagem:
+
+```bash
+docker build -t painel-glpi:latest .
+```
+
+Execução do container:
+
+```bash
+docker run -d --name painel-glpi --env-file .env -e API_PORT=7020 -p 7020:7020 painel-glpi:latest
+```
+
+Com Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+
+URL: `http://SEU_SERVIDOR:7020`
+
 ## Execução com PM2 (recomendado)
 
 ```bash
@@ -105,4 +127,3 @@ server {
 - portas liberadas no firewall
 - processo gerenciado com PM2/serviço do sistema
 - monitoramento de logs ativo
-

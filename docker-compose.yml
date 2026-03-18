@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  painel-glpi:
+    build: .
+    container_name: painel-glpi
+    ports:
+      - "7020:7020"
+    env_file:
+      - .env
+    environment:
+      API_PORT: 7020
+      NODE_ENV: production
+    restart: unless-stopped

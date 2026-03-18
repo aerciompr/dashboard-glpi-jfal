@@ -8,6 +8,8 @@ type Ticket = {
   id: number;
   name: string;
   description: string;
+  requester: string;
+  location: string;
   category: string;
   date: Date;
   closedDate: Date | null;
@@ -23,24 +25,19 @@ const POLL_MS = 10000;
 const NEW_STATUS: GlpiStatus = 1;
 const ACTIVE_STATUSES: GlpiStatus[] = [1, 2, 3, 4];
 
-const TYPE_LABEL: Record<number, string> = {
-  1: "Incidente",
-  2: "Requisição"
-};
-
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
 const GLPI_TICKET_URL =
   import.meta.env.VITE_GLPI_TICKET_URL ?? "https://glpi.jfal.jus.br/front/ticket.form.php?id=";
 
 const initialTickets: Ticket[] = [
-  { id: 2197, name: "Usuário sem acesso ao ERP", description: "Usuário relata bloqueio no acesso ao sistema ERP desde 08:45.", category: "Acesso", date: new Date("2026-03-10T09:22:00"), closedDate: null, type: 2, status: 1 },
-  { id: 2196, name: "Impressora do financeiro offline", description: "Equipamento do setor financeiro não responde em rede.", category: "Infraestrutura", date: new Date("2026-03-10T08:30:00"), closedDate: null, type: 1, status: 2 },
-  { id: 2195, name: "Erro de login no e-mail", description: "Falha de autenticação ao acessar webmail institucional.", category: "Sistemas", date: new Date("2026-03-09T16:10:00"), closedDate: null, type: 1, status: 4 },
-  { id: 2194, name: "Solicitação de novo ramal", description: "Pedido de criação de ramal para servidor recém lotado.", category: "Telefonia", date: new Date("2026-03-09T14:12:00"), closedDate: null, type: 2, status: 3 },
-  { id: 2193, name: "Configuração de assinatura Outlook", description: "Ajustar assinatura padrão com dados da unidade.", category: "E-mail", date: new Date("2026-03-09T11:40:00"), closedDate: new Date("2026-03-09T12:20:00"), type: 2, status: 5 },
-  { id: 2192, name: "Atualização de agente GLPI", description: "Atualização do agente de inventário em estações do setor.", category: "Inventário", date: new Date("2026-03-08T17:05:00"), closedDate: new Date("2026-03-08T18:00:00"), type: 2, status: 5 },
-  { id: 2191, name: "VPN indisponível para comercial", description: "Usuários externos sem conexão por VPN corporativa.", category: "Rede", date: new Date("2026-03-08T10:08:00"), closedDate: null, type: 1, status: 2 },
-  { id: 2190, name: "Conta de usuário bloqueada", description: "Desbloqueio de conta após tentativas inválidas.", category: "Acesso", date: new Date("2026-03-07T15:32:00"), closedDate: new Date("2026-03-07T16:02:00"), type: 2, status: 6 }
+  { id: 2197, name: "Usuário sem acesso ao ERP", description: "Usuário relata bloqueio no acesso ao sistema ERP desde 08:45.", requester: "Equipe Financeiro", location: "Atendimento", category: "Acesso", date: new Date("2026-03-10T09:22:00"), closedDate: null, type: 2, status: 1 },
+  { id: 2196, name: "Impressora do financeiro offline", description: "Equipamento do setor financeiro não responde em rede.", requester: "Equipe Financeiro", location: "Atendimento", category: "Infraestrutura", date: new Date("2026-03-10T08:30:00"), closedDate: null, type: 1, status: 2 },
+  { id: 2195, name: "Erro de login no e-mail", description: "Falha de autenticação ao acessar webmail institucional.", requester: "Suporte Interno", location: "NTI", category: "Sistemas", date: new Date("2026-03-09T16:10:00"), closedDate: null, type: 1, status: 4 },
+  { id: 2194, name: "Solicitação de novo ramal", description: "Pedido de criação de ramal para servidor recém lotado.", requester: "Secretaria", location: "Atendimento", category: "Telefonia", date: new Date("2026-03-09T14:12:00"), closedDate: null, type: 2, status: 3 },
+  { id: 2193, name: "Configuração de assinatura Outlook", description: "Ajustar assinatura padrão com dados da unidade.", requester: "Gabinete", location: "NTI", category: "E-mail", date: new Date("2026-03-09T11:40:00"), closedDate: new Date("2026-03-09T12:20:00"), type: 2, status: 5 },
+  { id: 2192, name: "Atualização de agente GLPI", description: "Atualização do agente de inventário em estações do setor.", requester: "Infraestrutura", location: "NOC", category: "Inventário", date: new Date("2026-03-08T17:05:00"), closedDate: new Date("2026-03-08T18:00:00"), type: 2, status: 5 },
+  { id: 2191, name: "VPN indisponível para comercial", description: "Usuários externos sem conexão por VPN corporativa.", requester: "Comercial", location: "Atendimento", category: "Rede", date: new Date("2026-03-08T10:08:00"), closedDate: null, type: 1, status: 2 },
+  { id: 2190, name: "Conta de usuário bloqueada", description: "Desbloqueio de conta após tentativas inválidas.", requester: "RH", location: "Atendimento", category: "Acesso", date: new Date("2026-03-07T15:32:00"), closedDate: new Date("2026-03-07T16:02:00"), type: 2, status: 6 }
 ];
 
 const incidentTemplates = [
@@ -52,6 +49,9 @@ const incidentTemplates = [
 
 const formatDate = (date: Date) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(date);
+
+const formatDateOnly = (date: Date) =>
+  new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(date);
 
 const formatServiceDate = (date: Date | null) => {
   if (!date) return "Não identificada";
@@ -68,6 +68,16 @@ const toPlainText = (value: unknown) => {
     return doc.body.textContent?.replace(/\s+/g, " ").trim() ?? "";
   }
   return input.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+};
+
+const shortCategory = (value: string) => {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return "Sem categoria";
+  const byArrow = normalized.split(">").map((item) => item.trim()).filter(Boolean);
+  if (byArrow.length > 1) return byArrow.slice(-2).join(" > ");
+  const bySlash = normalized.split("/").map((item) => item.trim()).filter(Boolean);
+  if (bySlash.length > 1) return bySlash.slice(-2).join(" / ");
+  return normalized;
 };
 
 const buildDateFromParts = (
@@ -208,6 +218,8 @@ const fetchBackendTickets = async (): Promise<Ticket[]> => {
     id: Number(item.id),
     name: String(item.name ?? ""),
     description: toPlainText(item.description ?? "") || "Sem descrição informada.",
+    requester: String(item.requester ?? ""),
+    location: String(item.location ?? ""),
     category: String(item.category ?? "Sem categoria"),
     date: item.date ? new Date(String(item.date)) : new Date(),
     closedDate: item.closedDate ? new Date(String(item.closedDate)) : null,
@@ -219,6 +231,8 @@ const fetchBackendTickets = async (): Promise<Ticket[]> => {
     id: Number(item.id),
     name: String(item.name ?? ""),
     description: toPlainText(item.description ?? ""),
+    requester: String(item.requester ?? ""),
+    location: String(item.location ?? ""),
     category: String(item.category ?? "Sem categoria"),
     date: item.date ? new Date(String(item.date)) : new Date(),
     closedDate: null,
@@ -262,6 +276,8 @@ const simulateUpdate = (current: Ticket[], autoAdd: boolean): Ticket[] => {
       id: highestId + 1,
       name: sample.name,
       description: "Novo chamado detectado automaticamente no modo de simulação.",
+      requester: "Simulação",
+      location: "Atendimento",
       category: sample.category,
       date: new Date(),
       closedDate: null,
@@ -323,7 +339,7 @@ function App() {
   const allTickets = useMemo(() => [...tickets].sort((a, b) => b.id - a.id), [tickets]);
   const newTickets = useMemo(() => allTickets.filter((ticket) => ticket.status === NEW_STATUS), [allTickets]);
   const oldestNewTickets = useMemo(
-    () => [...newTickets].sort((a, b) => a.date.getTime() - b.date.getTime()),
+    () => [...newTickets].sort((a, b) => b.date.getTime() - a.date.getTime()),
     [newTickets]
   );
   const oldestNewTicketsWithAiDate = useMemo<TicketWithSchedule[]>(
@@ -538,7 +554,7 @@ function App() {
       <section className="table-panel">
         <div className="panel-head">
           <h2>Chamados Novos</h2>
-          <small>Ordenado do mais antigo para o mais recente • atualizado em {formatDate(lastSync)}</small>
+          <small>Ordenado do mais recente para o mais antigo • atualizado em {formatDate(lastSync)}</small>
         </div>
         <div className="table-wrap">
           <table>
@@ -547,7 +563,6 @@ function App() {
                 <th>ID</th>
                 <th>Título</th>
                 <th>Categoria</th>
-                <th>Tipo</th>
                 <th>Aberto em</th>
                 <th>Data do Agendamento</th>
                 <th>Dias em aberto</th>
@@ -563,10 +578,14 @@ function App() {
                   onMouseLeave={handleRowMouseLeave}
                 >
                   <td>{ticket.id}</td>
-                  <td>{ticket.name}</td>
-                  <td>{ticket.category}</td>
-                  <td>{TYPE_LABEL[ticket.type] ?? `Tipo ${ticket.type}`}</td>
-                  <td>{formatDate(ticket.date)}</td>
+                  <td>
+                    <strong className="ticket-title">{ticket.name}</strong>
+                    <small className="ticket-subline">
+                      Requerente: {ticket.requester || "Não informado"} • Localização: {ticket.location || "Não informada"}
+                    </small>
+                  </td>
+                  <td>{shortCategory(ticket.category)}</td>
+                  <td>{formatDateOnly(ticket.date)}</td>
                   <td>{formatServiceDate(ticket.serviceDate)}</td>
                   <td>{getOpenDays(ticket.date)}</td>
                   <td>
@@ -578,7 +597,7 @@ function App() {
               ))}
               {pagedOldestNewTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>Nenhum chamado novo pendente no momento.</td>
+                  <td colSpan={7}>Nenhum chamado novo pendente no momento.</td>
                 </tr>
               ) : null}
             </tbody>

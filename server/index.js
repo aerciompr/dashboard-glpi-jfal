@@ -49,6 +49,78 @@ const parseStatus = (value) => {
   return 1;
 };
 
+const parseUserId = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+};
+
+const formatUserName = (user, fallbackId) => {
+  const firstName = String(user?.firstname ?? "").trim();
+  const lastName = String(user?.realname ?? "").trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+  const login = String(user?.name ?? "").trim();
+  if (fullName) return fullName;
+  if (login) return login;
+  return `Usuário #${fallbackId}`;
+};
+
+const fetchUserNamesByIds = async (sessionToken, userIds) => {
+  if (userIds.length === 0) return new Map();
+  const usersMap = new Map();
+
+  await Promise.all(
+    userIds.map(async (userId) => {
+      try {
+        const params = new URLSearchParams({
+          app_token: GLPI_APP_TOKEN,
+          session_token: sessionToken
+        });
+        const user = await requestJson(`${GLPI_API_BASE}/User/${userId}?${params.toString()}`);
+        usersMap.set(userId, formatUserName(user, userId));
+      } catch (_error) {
+        // keep fallback when user endpoint is unavailable for some IDs
+      }
+    })
+  );
+
+  return usersMap;
+};
+
+const fetchRequesterByTicketIds = async (sessionToken, ticketIds) => {
+  if (ticketIds.length === 0) return new Map();
+
+  const requesterUserIdByTicketId = new Map();
+
+  await Promise.all(
+    ticketIds.map(async (ticketId) => {
+      try {
+        const params = new URLSearchParams({
+          app_token: GLPI_APP_TOKEN,
+          session_token: sessionToken
+        });
+        const ticketUsers = await requestJson(`${GLPI_API_BASE}/Ticket/${ticketId}/Ticket_User?${params.toString()}`);
+        const list = Array.isArray(ticketUsers) ? ticketUsers : [];
+        const requester = list.find((item) => Number(item.type) === 1);
+        const userId = parseUserId(requester?.users_id);
+        if (userId) requesterUserIdByTicketId.set(ticketId, userId);
+      } catch (_error) {
+        // keep fallback when endpoint is unavailable for some tickets
+      }
+    })
+  );
+
+  const requesterUserIds = [...new Set([...requesterUserIdByTicketId.values()])];
+  const requesterNamesByUserId = await fetchUserNamesByIds(sessionToken, requesterUserIds);
+
+  const requesterByTicketId = new Map();
+  requesterUserIdByTicketId.forEach((userId, ticketId) => {
+    const requesterName = requesterNamesByUserId.get(userId);
+    if (requesterName) requesterByTicketId.set(ticketId, requesterName);
+  });
+
+  return requesterByTicketId;
+};
+
 const mapTicket = (raw, categoryById) => {
   const id = Number(raw.id);
   if (!Number.isFinite(id)) return null;
@@ -62,6 +134,8 @@ const mapTicket = (raw, categoryById) => {
     id,
     name: String(raw.name ?? raw.title ?? `Chamado #${id}`),
     description: String(raw.content ?? raw.description ?? "Sem descrição informada."),
+    requester: String(raw.requester ?? raw.author ?? raw.users_id_recipient ?? ""),
+    location: String(raw.location ?? raw.location_name ?? ""),
     category: String(categoryName),
     date: raw.date ? new Date(String(raw.date)).toISOString() : new Date().toISOString(),
     closedDate: raw.closedate
@@ -150,6 +224,8 @@ const fetchNewTicketsBySearch = async (sessionToken) => {
     "forcedisplay[4]": "14",
     "forcedisplay[5]": "15",
     "forcedisplay[6]": "21",
+    "forcedisplay[7]": "22",
+    "forcedisplay[8]": "83",
     range: "0-999",
     sort: "15",
     order: "ASC"
@@ -157,17 +233,30 @@ const fetchNewTicketsBySearch = async (sessionToken) => {
 
   const result = await requestJson(`${GLPI_API_BASE}/search/Ticket?${query.toString()}`);
   const list = Array.isArray(result.data) ? result.data : [];
+  const ticketIds = [...new Set(list.map((item) => Number(item["2"])).filter((value) => Number.isFinite(value)))];
+  const requesterByTicketId = await fetchRequesterByTicketIds(sessionToken, ticketIds);
+  const requesterIds = [...new Set(list.map((item) => parseUserId(item["4"])).filter((value) => value !== null))];
+  const requesterById = await fetchUserNamesByIds(sessionToken, requesterIds);
+
   return list
-    .map((item) => ({
-      id: Number(item["2"]),
-      name: String(item["1"] ?? ""),
-      description: String(item["21"] ?? ""),
-      category: String(item["7"] ?? "Sem categoria"),
-      date: item["15"] ? new Date(String(item["15"])).toISOString() : new Date().toISOString(),
-      closedDate: null,
-      type: Number(item["14"] || 1),
-      status: parseStatus(item["12"])
-    }))
+    .map((item) => {
+      const ticketId = Number(item["2"]);
+      const requesterId = parseUserId(item["4"]);
+      const requesterByTicket = requesterByTicketId.get(ticketId);
+      const requesterName = requesterId ? requesterById.get(requesterId) : null;
+      return {
+        id: ticketId,
+        name: String(item["1"] ?? ""),
+        description: String(item["21"] ?? ""),
+        requester: String(requesterByTicket ?? requesterName ?? ""),
+        location: String(item["83"] ?? ""),
+        category: String(item["7"] ?? "Sem categoria"),
+        date: item["15"] ? new Date(String(item["15"])).toISOString() : new Date().toISOString(),
+        closedDate: null,
+        type: Number(item["14"] || 1),
+        status: parseStatus(item["12"])
+      };
+    })
     .filter((item) => Number.isFinite(item.id));
 };
 
